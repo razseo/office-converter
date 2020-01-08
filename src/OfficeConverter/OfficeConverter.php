@@ -15,6 +15,7 @@ class OfficeConverter
     private $extension;
     private $basename;
     private $prefixExecWithExportHome;
+    private $profileFile;
 
     /**
      * OfficeConverter constructor.
@@ -47,12 +48,23 @@ class OfficeConverter
         }
 
         $outdir = $this->tempPath;
+        
+        // Create temp profile folder
+        $this->profileFile = '/tmp/libreoffice-' . md5 (uniqid());
+        
         $shell = $this->exec($this->makeCommand($outdir, $outputExtension));
+        
+        $this->exec('rm -rf ' . basename ($this->profileFile));
+        
         if ($shell['return'] != 0) {
             throw new OfficeConverterException("Convertion Failure! Contact Server Admin.");
         }
 
-        return $this->prepOutput($outdir, $filename, $outputExtension);
+        $res = $this->prepOutput($outdir, $filename, $outputExtension);
+        
+        $this->exec('chmod 0777 ' . $res);
+        
+        return $res;
     }
 
     /**
@@ -116,7 +128,7 @@ class OfficeConverter
         $oriFile = escapeshellarg($this->file);
         $outputDirectory = escapeshellarg($outputDirectory);
 
-        return "{$this->bin} --headless --convert-to {$outputExtension} {$oriFile} --outdir {$outputDirectory}";
+        return "{$this->bin} '-env:UserInstallation=file://{$this->profileFile}' --headless --convert-to {$outputExtension} {$oriFile} --outdir {$outputDirectory}";
     }
 
     /**
@@ -137,6 +149,19 @@ class OfficeConverter
         }
 
         return null;
+    }
+    
+    /**
+    * Recursive folder delete
+    * @param string $dir target directory
+    */
+    protected function delDir ($dir) {
+        $files = array_diff(scandir($dir), array('.','..'));
+        foreach ($files as $file) {
+            (is_dir("$dir/$file")) ? $this->delDir ("$dir/$file") : unlink ("$dir/$file");
+        }
+        
+        rmdir ($dir);
     }
 
     /**
